@@ -3,6 +3,7 @@
 import argparse
 from contextlib import contextmanager
 from configparser import RawConfigParser, NoSectionError, NoOptionError
+from functools import cmp_to_key
 import inspect
 import os
 import posixpath
@@ -13,63 +14,35 @@ import time
 
 import sh
 
+from .git_log import git_log
+
 invalid_hash = 'DOES_NOT_EXIST'
 
 
-def is_excluded(commit, excl):
-    # ugh
-    for e in excl:
-        if e.startswith(commit):
-            return True
+def git_commit_cmp(c1, c2):
+    '''
+        Compares commits, falls back to time compare
+        
+        Returns <0 if c1 is older than c2
+                0 if same commit
+                >0 if c2 is older than c1
+    '''
+    ts1, c1 = c1
+    ts2, c2 = c2
     
-    return False
+    if c1 == c2:
+        return 0
+    
+    if sh.git('merge-base', '--is-ancestor',
+              c1, c2, _ok_code=[0,1]).exit_code == 0:
+        return -1
+    elif sh.git('merge-base', '--is-ancestor',
+                c2, c1, _ok_code=[0,1]).exit_code == 0:
+        return 1
+    else:
+        return ts1 - ts2
 
 
-def git_log(cfg, fname, rev_range=None):
-    '''
-        Executes git log for a particular file, excluding particular commits that aren't
-        particularly useful to see
-    '''
-    
-    if rev_range:
-        endl = (rev_range, fname)
-        end = '%s %s' % (rev_range, fname)
-    else:
-        endl = (fname,)
-        end = fname
-    
-    tname = None
-    excluded = ['commit %s' % i for i in cfg.excluded_commits]
-    
-    if len(excluded) == 0:
-        os.system('git log --follow -p %s' % end)
-    else:
-        # read all the commits in, filtering out the excluded commits
-        try:
-            # grep -z isn't portable, so do it in python
-            pycontents = inspect.cleandoc("""
-                commits = ['%s']
-                
-                import sys
-                for t in sys.stdin.read().split('\\0'):
-                    for c in commits:
-                        if c in t:
-                            break
-                    else:
-                        sys.stdout.write(t)
-            """) % ("','".join(excluded))
-            
-            with tempfile.NamedTemporaryFile(mode='w', delete=False) as fp:
-                tname = fp.name
-                fp.write(pycontents)
-            
-            cmd = "git log --follow -p -z --color %s | python3 %s | tr -d '\\000' | less -FRX" % (end, tname)
-            os.system(cmd)
-            
-        finally:
-            if tname is not None:
-                os.unlink(tname)
-            pass
 
 @contextmanager
 def chdir(path):
@@ -104,34 +77,35 @@ def choose_suggestion(cfg, fname):
         for i, s in enumerate(suggestions):
             print(" ", i, s)
         
-        v = input("Use? [0-%s,n] " % i)
-        if v != 'n':
-            return suggestions[int(v)]
+        print("Select one or more files (specify multiple via comma)")
+        inp = input("Use? [0-%s,n] (multi via comma) " % i)
+        if inp != 'n':
+            return sorted([suggestions[int(v)] for v in inp.split(',')]) 
 
 class ValidationInfo:
     
     @staticmethod
-    def from_line(cfg, py_fname, line):
+    def from_line(cfg, dst_fname, line):
         line = line.strip()
         if line.startswith('# novalidate'):
             return ValidationInfo(novalidate=True)
         
         s = line.split()
-        if len(s) != 6:
+        if len(s) < 6:
             raise GSTError("Invalid validation line: %s" % line)
         
         return ValidationInfo(date=s[2],
                               initials=s[3],
                               hash=s[4],
-                              orig_fname=s[5],
-                              py_fname=py_fname,
+                              orig_fnames=s[5:],
+                              dst_fname=dst_fname,
                               cfg=cfg)
     
     @staticmethod
-    def from_now(cfg, initials, orig_fname):
+    def from_now(cfg, initials, orig_fnames):
         v = ValidationInfo(date=time.strftime('%Y-%m-%d'),
                            initials=initials,
-                           orig_fname=posixpath.normpath(orig_fname),
+                           orig_fnames=orig_fnames,
                            cfg=cfg)
         
         v.hash = v.orig_hash
@@ -142,8 +116,8 @@ class ValidationInfo:
         self.date = kwargs.get('date')
         self.initials = kwargs.get('initials')
         self.hash = kwargs.get('hash')
-        self.orig_fname = kwargs.get('orig_fname')
-        self.py_fname = kwargs.get('py_fname')
+        self.orig_fnames = [posixpath.normpath(of) for of in kwargs.get('orig_fnames', [])]
+        self.dst_fname = kwargs.get('dst_fname')
         self.cfg = kwargs.get('cfg')
     
     def is_up_to_date(self):
@@ -151,22 +125,33 @@ class ValidationInfo:
     
     @property
     def orig_hash(self):
+        '''Returns or calculates the hash that we're tracking'''
+        
         if not hasattr(self, '_orig_hash'):
             with chdir(self.cfg.original_root):
-                fpath = normpath(self.orig_fname)
-                if not exists(fpath):
-                    self._orig_hash = invalid_hash
-                else:
+                hashes = []
+                for fpath in self.orig_fnames:
+                    # if one doesn't exist, everything is lost
+                    if not exists(fpath):
+                        hashes = []
+                        break
                     # Return the first commit that isn't excluded
-                    excl = self.cfg.excluded_commits
-                    for commit in sh.git('log', '--follow', '--pretty=%h', fpath, _tty_out=False, _iter=True):
-                        commit = commit.strip()
+                    for commit in sh.git('log', '--follow', '--pretty=%ct %h', fpath, _tty_out=False, _iter=True):
+                        ts, commit = commit.strip().split()
                         if (self.hash is not None and commit.startswith(self.hash)) or \
-                           not is_excluded(commit, excl):
-                            self._orig_hash = commit
+                           not self.cfg.is_commit_excluded(commit):
+                            hashes.append((ts, commit))
                             break
-                    else:
-                        self._orig_hash = invalid_hash
+                            
+                if not hashes:
+                    self._orig_hash = invalid_hash
+                elif len(hashes) == 1:
+                    self._orig_hash = hashes[0][1]
+                else:
+                    hashes.sort(key=cmp_to_key(git_commit_cmp))
+                    
+                    # Select the newest hash from the potentials
+                    self._orig_hash = hashes[-1][1]
         
         return self._orig_hash
     
@@ -175,7 +160,9 @@ class ValidationInfo:
         if self.novalidate:
             return '# novalidate\n'
         else:
-            return '# validated: %(date)s %(initials)s %(hash)s %(orig_fname)s\n' % self.__dict__
+            l = '# validated: %(date)s %(initials)s %(hash)s ' % self.__dict__
+            l += ' '.join(self.orig_fnames) + '\n'
+            return l
     
     def __repr__(self):
         return '<ValidationInfo: %s>' % self.line.strip()
@@ -297,13 +284,13 @@ def action_diff(cfg, args):
         update_src(cfg, info)
     
     with chdir(cfg.original_root): 
-        git_log(cfg, normpath(info.orig_fname),
+        git_log(cfg, info.orig_fnames,
                 '%s..%s' % (info.hash, info.orig_hash))
     
     if not info.is_up_to_date():
         print()
         if input("Validate file? [y/n]").lower() in ['y', 'yes']:
-            args.orig_fname = None
+            args.orig_fnames = None
             action_validate(cfg, args)
         
 
@@ -320,19 +307,19 @@ def action_validate(cfg, args):
     if not initials:
         raise GSTError("Specify --initials or execute 'git config user.name Something'")
     
-    orig_fname = args.orig_fname
-    if not orig_fname:
+    orig_fnames = args.orig_fnames
+    if not orig_fnames:
         info = get_info(cfg, fname)
         if info is not None:
-            orig_fname = info.orig_fname
+            orig_fnames = info.orig_fnames
     
     # if there's no orig_filename specified, then raise an error
-    if not orig_fname:
-        orig_fname = choose_suggestion(cfg, fname)
-        if not orig_fname:
-            raise GSTError("Error: must specify original filename")
+    if not orig_fnames:
+        orig_fnames = choose_suggestion(cfg, fname)
+        if not orig_fnames:
+            raise GSTError("Error: must specify original filename(s)")
     
-    info = ValidationInfo.from_now(cfg, initials, orig_fname)
+    info = ValidationInfo.from_now(cfg, initials, orig_fnames)
     
     # write the information to the file
     set_info(fname, info)
@@ -359,10 +346,10 @@ def action_show_log(cfg, args):
             git_log(cfg, fname)
 
 def update_src(cfg, info):
-    print(info.orig_fname, "no longer exists, choose another?")
-    info.orig_fname = choose_suggestion(cfg, relpath(info.py_fname, cfg.validation_root))
-    if info.orig_fname is not None:
-        set_info(info.py_fname, info)
+    print(info.orig_fnames, "no longer exists, choose another?")
+    info.orig_fnames = choose_suggestion(cfg, relpath(info.dst_fname, cfg.validation_root))
+    if info.orig_fnames:
+        set_info(info.dst_fname, info)
         if hasattr(info, '_orig_hash'):
             delattr(info, '_orig_hash')
 
@@ -441,6 +428,14 @@ class RepoData:
                         
         return self._exclude_commits
     
+    def is_commit_excluded(self, commit):
+        # ugh
+        for e in self.excluded_commits:
+            if e.startswith(commit):
+                return True
+        
+        return False
+    
 
              
 def main():
@@ -470,7 +465,7 @@ def main():
     sp = subparsers.add_parser('set-valid',
                                help=inspect.getdoc(action_validate))
     sp.add_argument('filename')
-    sp.add_argument('orig_fname', nargs='?')
+    sp.add_argument('orig_fnames', nargs='*')
     sp.add_argument('--initials', default=None)
     
     sp = subparsers.add_parser('set-novalidate',
