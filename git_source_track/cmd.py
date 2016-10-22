@@ -235,7 +235,7 @@ def action_show(cfg, args):
         Show status of all files
     '''
     
-    counts = {'good': 0, 'outdated': 0, 'unknown': 0}
+    counts = {'good': 0, 'outdated': 0, 'unknown': 0, 'error': 0}
     
     if hasattr(args, 'filename') and args.filename is not None:
         _action_show(cfg, get_fname(cfg.validation_root, args.filename), counts)
@@ -249,33 +249,41 @@ def action_show(cfg, args):
                 _action_show(cfg, fname, counts)
     
     print()
-    print("%(good)s OK, %(outdated)s out of date, %(unknown)s unknown" % (counts))
+    print("%(good)s OK, %(outdated)s out of date, %(unknown)s unknown, %(error)s error" % (counts))
 
 def _action_show(cfg, fname, counts):
-    
-
-    info = get_info(cfg, fname)
     path = relpath(fname, cfg.validation_root)
-    
-    if info is None:
-        status = '-- '
-        counts['unknown'] += 1
-    elif info.novalidate:
-        status = 'OK '
-        counts['good'] += 1
+    extra = None
+
+    try:
+        info = get_info(cfg, fname)
+    except GSTError as e:
+        status = 'ERR'
+        extra = str(e)
+        counts['error'] += 1
     else:
-        if info.is_up_to_date():
+        if info is None:
+            status = '-- '
+            counts['unknown'] += 1
+        elif info.novalidate:
             status = 'OK '
             counts['good'] += 1
-        elif info.orig_hash == invalid_hash:
-            status = 'ERR'
-            counts['unknown'] += 1
         else:
-            status = "OLD"
-            path += ' (%s..%s)' % (info.hash, info.orig_hash)
-            counts['outdated'] += 1
+            if info.is_up_to_date():
+                status = 'OK '
+                counts['good'] += 1
+            elif info.orig_hash == invalid_hash:
+                status = 'ERR'
+                # TODO: create a better error message
+                counts['unknown'] += 1
+            else:
+                status = "OLD"
+                path += ' (%s..%s)' % (info.hash, info.orig_hash)
+                counts['outdated'] += 1
     
     print('%s: %s' % (status, path))
+    if extra:
+        print('--> ', extra)
     
 
 def action_diff(cfg, args):
