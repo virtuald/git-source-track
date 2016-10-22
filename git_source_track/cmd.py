@@ -8,6 +8,7 @@ import inspect
 import os
 import posixpath
 from os.path import abspath, basename, dirname, exists, join, normpath, relpath, splitext
+import re
 import sys
 import tempfile
 import time
@@ -64,10 +65,12 @@ def get_fname(root, fname):
 
 def find_suggestions(cfg, fname):
     fname = splitext(basename(fname))[0].lower()
+    fname = re.sub(r'[^a-z0-9]+', '', fname)
     
     for root, _, files in os.walk(cfg.original_root):
         for f in files:
-            if splitext(f)[0].lower() == fname:
+            p = re.sub(r'[^a-z0-9]+', '', splitext(f)[0].lower())
+            if p == fname:
                 yield relpath(join(root, f), cfg.original_root)
 
 def choose_suggestion(cfg, fname):
