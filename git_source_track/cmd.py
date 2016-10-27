@@ -90,8 +90,8 @@ class ValidationInfo:
     @staticmethod
     def from_line(cfg, dst_fname, line):
         line = line.strip()
-        if line.startswith('# novalidate'):
-            return ValidationInfo(novalidate=True)
+        if line.startswith('# novalidate') or line.startswith('# notrack'):
+            return ValidationInfo(notrack=True)
         
         s = line.split()
         if len(s) < 6:
@@ -115,7 +115,7 @@ class ValidationInfo:
         return v
     
     def __init__(self, **kwargs):
-        self.novalidate = kwargs.get('novalidate', False)
+        self.notrack = kwargs.get('notrack', False)
         self.date = kwargs.get('date')
         self.initials = kwargs.get('initials')
         self.hash = kwargs.get('hash')
@@ -160,8 +160,8 @@ class ValidationInfo:
     
     @property
     def line(self):
-        if self.novalidate:
-            return '# novalidate\n'
+        if self.notrack:
+            return '# notrack\n'
         else:
             l = '# validated: %(date)s %(initials)s %(hash)s ' % self.__dict__
             l += ' '.join(self.orig_fnames) + '\n'
@@ -174,7 +174,7 @@ class ValidationInfo:
 def set_info(fname, info):
     '''
         Writes the magic to the first line that starts with # validated
-        or # novalidate. If no such line exists, write to the first line
+        or # notrack. If no such line exists, write to the first line
         of the file
     '''
     
@@ -187,7 +187,8 @@ def set_info(fname, info):
         # search for the line first
         for line in fin:
             if line.startswith('# validated') or \
-               line.startswith('# novalidate'):
+               line.startswith('# novalidate') or \
+               line.startswith('# notrack'):
                 found = True
                 break
         
@@ -201,7 +202,8 @@ def set_info(fname, info):
                     written = True
                     
                 elif line.startswith('# validated') or \
-                   line.startswith('# novalidate'):
+                   line.startswith('# novalidate') or \
+                   line.startswith('# notrack'):
                     line = info.line
                     written = True
             
@@ -213,7 +215,8 @@ def get_info(cfg, fname):
     with open(normpath(fname)) as fp:
         for line in fp:
             if line.startswith('# validated') or \
-               line.startswith('# novalidate'):
+               line.startswith('# novalidate') or \
+               line.startswith('# notrack'):
                 return ValidationInfo.from_line(cfg, fname, line)
 
 #
@@ -255,7 +258,7 @@ def _action_show(cfg, fname, counts):
         if info is None:
             status = '-- '
             counts['unknown'] += 1
-        elif info.novalidate:
+        elif info.notrack:
             status = 'OK '
             counts['good'] += 1
         else:
@@ -331,10 +334,10 @@ def action_validate(cfg, args):
     #print(join(cfg.original_root, orig_fname))
     print(info.line)
     
-def action_novalidate(cfg, args):
-    '''Sets special novalidate metadata in file'''
+def action_notrack(cfg, args):
+    '''Sets special notrack metadata in file'''
     fname = get_fname(cfg.validation_root, args.filename)
-    info = ValidationInfo(novalidate=True, cfg=cfg)
+    info = ValidationInfo(notrack=True, cfg=cfg)
     set_info(fname, info)
     
     print(fname)
@@ -471,8 +474,8 @@ def main():
     sp.add_argument('orig_fnames', nargs='*')
     sp.add_argument('--initials', default=None)
     
-    sp = subparsers.add_parser('set-novalidate',
-                               help=inspect.getdoc(action_novalidate))
+    sp = subparsers.add_parser('set-notrack',
+                               help=inspect.getdoc(action_notrack))
     sp.add_argument('filename')
     
     sp = subparsers.add_parser('show-log',
@@ -510,8 +513,8 @@ def main():
         elif args.action == 'set-valid':
             action_validate(cfg, args)
             
-        elif args.action == 'set-novalidate':
-            action_novalidate(cfg, args)
+        elif args.action == 'set-notrack':
+            action_notrack(cfg, args)
             
         elif args.action == 'show-log':
             action_show_log(cfg, args)
