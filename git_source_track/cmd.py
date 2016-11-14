@@ -18,11 +18,12 @@ import sh
 from .git_log import git_log
 
 invalid_hash = 'DOES_NOT_EXIST'
+short_hash_sz = 12
 
 
 def git_commit_cmp(c1, c2):
     '''
-        Compares commits, falls back to time compare
+        Sorting function that compares commits, falls back to time compare
         
         Returns <0 if c1 is older than c2
                 0 if same commit
@@ -43,6 +44,12 @@ def git_commit_cmp(c1, c2):
     else:
         return ts1 - ts2
 
+def git_commit_eq(c1, c2):
+    '''
+        Compares two commits for equality, ignoring length and case
+    '''
+    clen = min(len(c1), len(c2))
+    return c1.lower()[:clen] == c2.lower()[:clen]
 
 
 @contextmanager
@@ -124,7 +131,7 @@ class ValidationInfo:
         self.cfg = kwargs.get('cfg')
     
     def is_up_to_date(self):
-        return self.orig_hash == self.hash
+        return git_commit_eq(self.orig_hash, self.hash)
     
     @property
     def orig_hash(self):
@@ -139,9 +146,10 @@ class ValidationInfo:
                         hashes = []
                         break
                     # Return the first commit that isn't excluded
-                    for commit in sh.git('log', '--follow', '--pretty=%ct %h', fpath, _tty_out=False, _iter=True):
+                    for commit in sh.git('log', '--follow', '--pretty=%ct %H', fpath, _tty_out=False, _iter=True):
                         ts, commit = commit.strip().split()
-                        if (self.hash is not None and commit.startswith(self.hash)) or \
+                        commit = commit[:short_hash_sz]
+                        if (self.hash is not None and git_commit_eq(commit, self.hash)) or \
                            not self.cfg.is_commit_excluded(commit):
                             hashes.append((ts, commit))
                             break
@@ -437,7 +445,7 @@ class RepoData:
     def is_commit_excluded(self, commit):
         # ugh
         for e in self.excluded_commits:
-            if e.startswith(commit):
+            if git_commit_eq(e, commit):
                 return True
         
         return False
