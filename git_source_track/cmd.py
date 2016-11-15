@@ -20,6 +20,7 @@ from .git_log import git_log
 invalid_hash = 'DOES_NOT_EXIST'
 short_hash_sz = 12
 
+cfg_section = 'git-source-track'
 
 def git_commit_cmp(c1, c2):
     '''
@@ -74,11 +75,11 @@ def find_suggestions(cfg, fname):
     fname = splitext(basename(fname))[0].lower()
     fname = re.sub(r'[^a-z0-9]+', '', fname)
     
-    for root, _, files in os.walk(cfg.original_root):
+    for root, _, files in os.walk(cfg.upstream_root):
         for f in files:
             p = re.sub(r'[^a-z0-9]+', '', splitext(f)[0].lower())
             if p == fname:
-                yield relpath(join(root, f), cfg.original_root)
+                yield relpath(join(root, f), cfg.upstream_root)
 
 def choose_suggestion(cfg, fname):
     suggestions = list(sorted(find_suggestions(cfg, fname)))
@@ -138,7 +139,7 @@ class ValidationInfo:
         '''Returns or calculates the hash that we're tracking'''
         
         if not hasattr(self, '_orig_hash'):
-            with chdir(self.cfg.original_root):
+            with chdir(self.cfg.upstream_root):
                 hashes = []
                 for fpath in self.orig_fnames:
                     # if one doesn't exist, everything is lost
@@ -297,7 +298,7 @@ def action_diff(cfg, args):
     if info.orig_hash == invalid_hash:
         update_src(cfg, info)
     
-    with chdir(cfg.original_root): 
+    with chdir(cfg.upstream_root): 
         git_log(cfg, info.orig_fnames,
                 '%s..%s' % (info.hash, info.orig_hash))
     
@@ -331,7 +332,7 @@ def action_validate(cfg, args):
     if not orig_fnames:
         orig_fnames = choose_suggestion(cfg, fname)
         if not orig_fnames:
-            raise GSTError("Error: must specify original filename(s)")
+            raise GSTError("Error: must specify upstream filename(s)")
     
     info = ValidationInfo.from_now(cfg, initials, orig_fnames)
     
@@ -339,7 +340,7 @@ def action_validate(cfg, args):
     set_info(fname, info)
     
     print(fname)
-    #print(join(cfg.original_root, orig_fname))
+    #print(join(cfg.upstream_root, orig_fname))
     print(info.line)
     
 def action_notrack(cfg, args):
@@ -353,10 +354,10 @@ def action_notrack(cfg, args):
 
 
 def action_show_log(cfg, args):
-    '''Shows logs of file in original root'''
+    '''Shows logs of file in upstream root'''
     fname = choose_suggestion(cfg, args.filename)
     if fname:
-        with chdir(cfg.original_root):
+        with chdir(cfg.upstream_root):
             git_log(cfg, fname)
 
 def update_src(cfg, info):
@@ -390,8 +391,8 @@ class RepoData:
         
             [git-source-track]
             
-            # Original files
-            original_root = ../path/to/files
+            # Upstream files
+            upstream_root = ../path/to/files
             
             # Files that are being validated 
             validation_root = path/to_files
@@ -409,23 +410,31 @@ class RepoData:
         if not exists(cfgpath):
             raise GSTError("Configuration file '%s' was not found" % cfgpath)
         
-        cfg = RawConfigParser()
         cfg.read(cfgpath)
         
         cfgdir = dirname(cfgpath)
         
-        # All loaded paths are relative to the config file
-        for k in ['original_root', 'validation_root', 'exclude_commits_file']:
+        # Backwards compat
+        try:
             try:
-                path = cfg.get('git-source-track', k)
-            except NoSectionError as e:
-                raise GSTError("%s: %s" % (cfgpath, str(e)))
-            except NoOptionError as e:
-                if k != 'exclude_commits_file':
-                    raise GSTError("%s: %s" % (cfgpath, str(e)))
-            else:
-                path = abspath(join(cfgdir, os.path.normpath(path)))
-                setattr(self, k, path)
+                original_root = cfg.get(cfg_section, 'original_root')
+                cfg.set(cfg_section, 'upstream_root', original_root)
+            except NoOptionError:
+                pass
+            
+            # All loaded paths are relative to the config file
+            for k in ['upstream_root', 'validation_root', 'exclude_commits_file']:
+                try:
+                    path = cfg.get(cfg_section, k)
+                except NoOptionError as e:
+                    if k != 'exclude_commits_file':
+                        raise GSTError("%s: %s" % (cfgpath, str(e)))
+                else:
+                    path = abspath(join(cfgdir, os.path.normpath(path)))
+                    setattr(self, k, path)
+        
+        except NoSectionError as e:
+            raise GSTError("%s: %s" % (cfgpath, str(e)))
         
     @property
     def excluded_commits(self):
@@ -469,9 +478,9 @@ def find_config_file():
 def main():
     '''
         This tool allows one to put metadata in each file noting the last git
-        commit that the original file was inspected at. Using this metadata,
+        commit that the upstream file was inspected at. Using this metadata,
         you can use the 'diff' subcommand to easily see the changes that were
-        made to the original file.
+        made to the upstream file.
     
         Once you're satisified that the destination version of the file matches
         sufficiently enough, use the set-valid command to record the validation

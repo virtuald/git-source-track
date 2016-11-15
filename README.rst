@@ -32,7 +32,7 @@ that has the following ini-style format::
     [git-source-track]
             
     # Original files
-    original_root = ../path/to/files
+    upstream_root = ../path/to/files
     
     # Files that are being validated 
     validation_root = path/to_files
