@@ -7,7 +7,7 @@ from functools import cmp_to_key
 import inspect
 import os
 import posixpath
-from os.path import abspath, basename, dirname, exists, join, normpath, relpath, splitext
+from os.path import abspath, basename, dirname, exists, join, normpath, relpath, split, splitext
 import re
 import sys
 import tempfile
@@ -450,8 +450,22 @@ class RepoData:
         
         return False
     
-
-             
+    
+def find_config_file():
+    
+    root = os.getcwd()
+    repo_root = sh.git('rev-parse', '--show-toplevel').strip()
+    
+    while root:
+        cfg_path = join(root, '.gittrack')
+        if exists(cfg_path):
+            return cfg_path
+        
+        elif repo_root == root:
+            break
+        else:
+            root = split(root)[0]
+    
 def main():
     '''
         This tool allows one to put metadata in each file noting the last git
@@ -498,9 +512,12 @@ def main():
 
     args = parser.parse_args()
     
-    # get the absolute path of the git repo
-    repo_path = sh.git('rev-parse', '--show-toplevel').strip()
-    cfg_path = join(repo_path, '.gittrack')
+    # Find the config file
+    cfg_path = find_config_file()
+    if not cfg_path:
+        parser.error("Could not find .gittrack")
+    
+    action = args.action
     
     try:
         cfg = RepoData(cfg_path)
