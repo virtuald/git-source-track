@@ -379,6 +379,30 @@ def action_update_src(cfg, args):
     else:
         update_src(cfg, info)
 
+def action_upstream_checkout(cfg, args):
+    '''Set upstream git repo to commit specified in config'''
+    with chdir(cfg.upstream_root):
+        os.system('git checkout %s' % cfg.upstream_commit)
+
+    print("Upstream commit is now", cfg.upstream_commit)
+
+def action_upstream_pull(cfg, args):
+    '''Update upstream git repo and set commit in config'''
+    with chdir(cfg.upstream_root):
+        # TODO: this should be configurable
+        os.system('git pull origin master')
+    
+    action_upstream_track(cfg, args)    
+
+def action_upstream_track(cfg, args):
+    '''Set upstream_commit to be whatever commit upstream happens to be at'''
+    cfg.upstream_commit = cfg.get_upstream_head()
+    cfg.save()
+    
+    print("Upstream commit changed to", cfg.upstream_commit)
+
+#def action_upstream_clone(cfg, args):
+#    pass
 
 
 
@@ -393,6 +417,9 @@ class RepoData:
             
             # Upstream files
             upstream_root = ../path/to/files
+            
+            # Commit in upstream repository
+            upstream_commit = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
             
             # Files that are being validated 
             validation_root = path/to_files
@@ -410,6 +437,9 @@ class RepoData:
         if not exists(cfgpath):
             raise GSTError("Configuration file '%s' was not found" % cfgpath)
         
+        self.cfgpath = cfgpath
+        
+        self.cfg = cfg = RawConfigParser()
         cfg.read(cfgpath)
         
         cfgdir = dirname(cfgpath)
@@ -433,6 +463,10 @@ class RepoData:
                     path = abspath(join(cfgdir, os.path.normpath(path)))
                     setattr(self, k, path)
         
+            self.upstream_commit = cfg.get(cfg_section, 'upstream_commit', fallback=None)
+            if not self.upstream_commit:
+                print("Warning: no upstream_commit option set", file=sys.stderr)
+                
         except NoSectionError as e:
             raise GSTError("%s: %s" % (cfgpath, str(e)))
         
@@ -459,6 +493,16 @@ class RepoData:
         
         return False
     
+    def save(self):
+        with open(self.cfgpath, 'w') as fp:
+            self.cfg.remove_option(cfg_section, 'original_root')
+            self.cfg.set(cfg_section, 'upstream_commit', self.upstream_commit)
+            
+            self.cfg.write(fp)
+        
+    def get_upstream_head(self):
+        with chdir(self.upstream_root):
+            return sh.git('rev-parse', 'HEAD').strip()
     
 def find_config_file():
     
@@ -517,6 +561,15 @@ def main():
                                help=inspect.getdoc(action_update_src))
     sp.add_argument('filename')
     
+    sp = subparsers.add_parser('upstream-checkout',
+                               help=inspect.getdoc(action_upstream_checkout))
+    
+    sp = subparsers.add_parser('upstream-pull',
+                               help=inspect.getdoc(action_upstream_pull))
+    
+    sp = subparsers.add_parser('upstream-track',
+                               help=inspect.getdoc(action_upstream_track))
+    
     sp = subparsers.add_parser('help', help='Show help (--help does not work as a git subcommand)')
 
     args = parser.parse_args()
@@ -530,6 +583,13 @@ def main():
     
     try:
         cfg = RepoData(cfg_path)
+        
+        if not action or not (action == 'help' or action.startswith('upstream-')):
+            upstream_head = cfg.get_upstream_head()
+                
+            if not git_commit_eq(upstream_head, cfg.upstream_commit):
+                raise GSTError("Upstream is at %s, expected %s\n... use git source-track upstream-* to fix" % \
+                                 (upstream_head, cfg.upstream_commit))
     except GSTError as e:
         print(str(e), file=sys.stderr)
         exit(1)
@@ -555,6 +615,15 @@ def main():
             
         elif args.action == 'update-src':
             action_update_src(cfg, args)
+        
+        elif args.action == 'upstream-checkout':
+            action_upstream_checkout(cfg, args)
+            
+        elif args.action == 'upstream-pull':
+            action_upstream_pull(cfg, args)
+            
+        elif args.action == 'upstream-track':
+            action_upstream_track(cfg, args)
         
         else:
             parser.error("Invalid action %s" % args.action)

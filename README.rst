@@ -34,6 +34,9 @@ that has the following ini-style format::
     # Original files
     upstream_root = ../path/to/files
     
+    # Commit in original repository
+    upstream_commit = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    
     # Files that are being validated 
     validation_root = path/to_files
     
