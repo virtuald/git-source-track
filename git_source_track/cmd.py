@@ -584,7 +584,8 @@ def main():
     try:
         cfg = RepoData(cfg_path)
         
-        if not action or not (action == 'help' or action.startswith('upstream-')):
+        if cfg.upstream_commit and \
+            (not action or not (action == 'help' or action.startswith('upstream-'))):
             upstream_head = cfg.get_upstream_head()
                 
             if not git_commit_eq(upstream_head, cfg.upstream_commit):
