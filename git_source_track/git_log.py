@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-import shlex
+from six.moves import shlex_quote
 import sys
 import tempfile
 
@@ -62,7 +62,7 @@ def git_log(cfg, filenames, rev_range=None):
         tname = None
         
         try:
-            file_list = ' '.join(shlex.quote(fname) for fname in filenames)
+            file_list = ' '.join(shlex_quote(fname) for fname in filenames)
             
             with tempfile.NamedTemporaryFile(mode='w', delete=False) as fp:
                 tname = fp.name

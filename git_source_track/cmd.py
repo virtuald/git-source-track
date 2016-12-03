@@ -1,8 +1,8 @@
-#!/usr/bin/env python3
+
+from __future__ import print_function
 
 import argparse
 from contextlib import contextmanager
-from configparser import RawConfigParser, NoSectionError, NoOptionError
 from functools import cmp_to_key
 import inspect
 import os
@@ -13,8 +13,12 @@ import sys
 import tempfile
 import time
 
+from six.moves.configparser import RawConfigParser, NoSectionError, NoOptionError
+from six.moves import input
+
 import sh
 
+from .compat import file_replace
 from .git_log import git_log
 
 invalid_hash = 'DOES_NOT_EXIST'
@@ -218,7 +222,7 @@ def set_info(fname, info):
             
             fout.write(line)
             
-    os.replace(fout.name, fname)
+    file_replace(fout.name, fname)
 
 def get_info(cfg, fname):
     with open(normpath(fname)) as fp:
@@ -462,8 +466,12 @@ class RepoData:
                 else:
                     path = abspath(join(cfgdir, os.path.normpath(path)))
                     setattr(self, k, path)
-        
-            self.upstream_commit = cfg.get(cfg_section, 'upstream_commit', fallback=None)
+            
+            try:
+                self.upstream_commit = cfg.get(cfg_section, 'upstream_commit')
+            except (NoSectionError, KeyError):
+                self.upstream_commit = None
+                
             if not self.upstream_commit:
                 print("Warning: no upstream_commit option set", file=sys.stderr)
                 

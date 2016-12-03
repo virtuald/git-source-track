@@ -57,9 +57,10 @@ See the help command for more information.
 Known issues
 ------------
 
-* Tool only tested using Python 3
+* Tool mostly tested using Python 3, but should work on Python 2
 * Probably won't work on Windows, due to the use of the 'sh' package and because
   there are dependencies on unix-style tools
+  * May work in Windows 10 posix environment
 * Assumes destination files are python files
 * Emits python style comments on destination files
 

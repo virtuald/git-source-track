@@ -53,10 +53,12 @@ setup(
         'Environment :: Console',
         'Intended Audience :: Developers',
         'Programming Language :: Python',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
         'License :: OSI Approved :: Apache Software License'
     ],
     entry_points = {
         'console_scripts': ['git-source-track = git_source_track.cmd:main']
     },
-    install_requires=['sh']
+    install_requires=['sh', 'six']
 )
