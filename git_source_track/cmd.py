@@ -592,6 +592,9 @@ def main():
     try:
         cfg = RepoData(cfg_path)
         
+        if not exists(cfg.upstream_root):
+            raise GSTError("Upstream directory %s does not exist" % cfg.upstream_root)
+        
         if cfg.upstream_commit and \
             (not action or not (action == 'help' or action.startswith('upstream-'))):
             upstream_head = cfg.get_upstream_head()
