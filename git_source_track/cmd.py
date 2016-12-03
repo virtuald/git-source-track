@@ -600,10 +600,22 @@ def main():
             upstream_head = cfg.get_upstream_head()
                 
             if not git_commit_eq(upstream_head, cfg.upstream_commit):
-                raise GSTError("Upstream is at %s, expected %s\n... use git source-track upstream-* to fix" % \
-                                 (upstream_head, cfg.upstream_commit))
+                err = inspect.cleandoc('''
+                    Upstream commit is %s, %s is in .gittrack
+                    
+                    To fix use one of these commands:
+                    
+                    * git source-track upstream-checkout: will set the upstream commit to match
+                      that which is in .gittrack
+                    * git source-track upstream-track: will modify .gittrack to match the current
+                      upstream commit
+                    
+                    If in doubt, you probably want 'git source-track upstream-checkout'
+                ''') % (upstream_head, cfg.upstream_commit)
+                
+                raise GSTError(err)
     except GSTError as e:
-        print(str(e), file=sys.stderr)
+        print('Error:', str(e), file=sys.stderr)
         exit(1)
     
     try:
