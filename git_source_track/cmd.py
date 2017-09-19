@@ -593,7 +593,10 @@ def main():
         cfg = RepoData(cfg_path)
         
         if not exists(cfg.upstream_root):
-            raise GSTError("Upstream directory %s does not exist" % cfg.upstream_root)
+            extra = ''
+            if action == 'upstream-checkout':
+                extra = ' (you may need to git pull manually)'
+            raise GSTError("Upstream directory %s does not exist%s" % (cfg.upstream_root, extra))
         
         if cfg.upstream_commit and \
             (not action or not (action == 'help' or action.startswith('upstream-'))):
