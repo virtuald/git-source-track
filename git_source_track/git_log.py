@@ -7,6 +7,24 @@ import tempfile
 
 import sh
 
+def _multi_output(commands):
+    '''
+        Shows output of multiple git commands
+        
+        .. make sure the output is shell-safe
+    '''
+    tname = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as fp:
+            tname = fp.name
+            for command in commands:
+                fp.write(command)
+                fp.write('\n')
+            
+        os.system('bash %s | less -FRX' % tname)
+    finally:
+        if tname:
+            os.unlink(tname)
 
 def _get_commits(fname, rev_range):
     # Ask for the commit, timestamp, and the filename in case it changed
@@ -25,6 +43,10 @@ def _get_commits(fname, rev_range):
         l2 = next(it).strip()
         
         yield int(l1[0]), l1[1], l2
+
+def git_diff(filenames, rev_range):
+    commands = ['git diff --follow -w --color %s %s' % (rev_range, shlex_quote(f)) for f in filenames]
+    _multi_output(commands)
 
 def git_log(cfg, filenames, rev_range=None):
     '''
@@ -74,25 +96,20 @@ def git_log(cfg, filenames, rev_range=None):
         commits = [c for _, c, _ in commit_data if not (c in seen or seen_add(c))]
 
         # Finally, display them
-        tname = None
-        
         try:
             os.chdir(git_toplevel)
             
-            with tempfile.NamedTemporaryFile(mode='w', delete=False) as fp:
-                tname = fp.name
-                for commit in commits:
-                    if not cfg.is_commit_excluded(commit):
-                        file_list = ' '.join(shlex_quote(fname) for fname in fname_by_commit[commit])
-                        fp.write('git log -p -1 --follow --color %s -- %s\n' % (commit, file_list))
+            commands = []
             
-            with open(tname) as fp:
-                print(fp.read())
-                    
-            # Use os.system to make our lives easier
-            os.system('bash %s | less -FRX' % tname)
+            for commit in commits:
+                if not cfg.is_commit_excluded(commit):
+                    file_list = ' '.join(shlex_quote(fname) for fname in fname_by_commit[commit])
+                    commands.append('git log -p -1 --follow --color %s -- %s' % (commit, file_list))
+            
+            _multi_output(commands)
+            
         finally:
-            if tname:
-                os.unlink(tname)
             os.chdir(oldcwd)
+        
+
 

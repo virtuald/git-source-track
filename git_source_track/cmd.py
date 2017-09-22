@@ -19,7 +19,7 @@ from six.moves import input
 import sh
 
 from .compat import file_replace
-from .git_log import git_log
+from .git_log import git_log, git_diff
 
 invalid_hash = 'DOES_NOT_EXIST'
 short_hash_sz = 12
@@ -293,7 +293,7 @@ def _action_show(cfg, fname, counts):
     
 
 def action_diff(cfg, args):
-    '''Shows diff of file since last validation'''
+    '''Shows diff+log of file since last validation'''
     
     info = get_info(cfg, get_fname(cfg.validation_root, args.filename))
     if info is None:
@@ -302,9 +302,12 @@ def action_diff(cfg, args):
     if info.orig_hash == invalid_hash:
         update_src(cfg, info)
     
-    with chdir(cfg.upstream_root): 
-        git_log(cfg, info.orig_fnames,
-                '%s..%s' % (info.hash, info.orig_hash))
+    with chdir(cfg.upstream_root):
+        revs = '%s..%s' % (info.hash, info.orig_hash)
+        if args.quiet:
+            git_diff(info.orig_fnames, revs)
+        else:
+            git_log(cfg, info.orig_fnames, revs)
     
     if not info.is_up_to_date():
         print()
@@ -546,6 +549,8 @@ def main():
                                help=inspect.getdoc(action_diff))
     sp.add_argument('filename')
     sp.add_argument('--initials', default=None)
+    sp.add_argument('-q', '--quiet', default=False, action='store_true',
+                    help="Don't show log messages, show diff only")
     
     sp = subparsers.add_parser('show',
                                help=inspect.getdoc(action_show))
@@ -593,10 +598,7 @@ def main():
         cfg = RepoData(cfg_path)
         
         if not exists(cfg.upstream_root):
-            extra = ''
-            if action == 'upstream-checkout':
-                extra = ' (you may need to git pull manually)'
-            raise GSTError("Upstream directory %s does not exist%s" % (cfg.upstream_root, extra))
+            raise GSTError("Upstream directory %s does not exist" % cfg.upstream_root)
         
         if cfg.upstream_commit and \
             (not action or not (action == 'help' or action.startswith('upstream-'))):
