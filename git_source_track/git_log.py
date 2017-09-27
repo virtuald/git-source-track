@@ -103,8 +103,14 @@ def git_log(cfg, filenames, rev_range=None):
             
             for commit in commits:
                 if not cfg.is_commit_excluded(commit):
-                    file_list = ' '.join(shlex_quote(fname) for fname in fname_by_commit[commit])
-                    commands.append('git log -p -1 --follow --color %s -- %s' % (commit, file_list))
+                    for i, fname in enumerate(sorted(fname_by_commit[commit])):
+                        fname = shlex_quote(fname)
+                        # git log --follow only allows a single filename, so
+                        # merge the outputs together using separate commands
+                        if i == 0:
+                            commands.append('git log -p -1 --follow --color %s -- %s' % (commit, fname))
+                        else:
+                            commands.append('git log -p -1 --follow --color --pretty='' %s -- %s' % (commit, fname))
             
             _multi_output(commands)
             
