@@ -14,7 +14,7 @@ import tempfile
 import time
 
 from six.moves.configparser import RawConfigParser, NoSectionError, NoOptionError
-from six.moves import input
+from six.moves import input, shlex_quote
 
 import sh
 
@@ -243,8 +243,10 @@ def action_show(cfg, args):
     
     counts = {'good': 0, 'outdated': 0, 'unknown': 0, 'error': 0}
     
+    show_stat = getattr(args, 'stat', False)
+    
     if hasattr(args, 'filename') and args.filename is not None:
-        _action_show(cfg, get_fname(cfg.validation_root, args.filename), counts)
+        _action_show(cfg, get_fname(cfg.validation_root, args.filename), counts, show_stat)
     else:
         for root, _, files in os.walk(cfg.validation_root):
             for f in sorted(files):
@@ -252,12 +254,12 @@ def action_show(cfg, args):
                     continue
                 
                 fname = join(root, f)
-                _action_show(cfg, fname, counts)
+                _action_show(cfg, fname, counts, show_stat)
     
     print()
     print("%(good)s OK, %(outdated)s out of date, %(unknown)s unknown, %(error)s error" % (counts))
 
-def _action_show(cfg, fname, counts):
+def _action_show(cfg, fname, counts, show_stat):
     path = relpath(fname, cfg.validation_root)
     extra = None
 
@@ -290,6 +292,12 @@ def _action_show(cfg, fname, counts):
     print('%s: %s' % (status, path))
     if extra:
         print('--> ', extra)
+    
+    if status == 'OLD' and show_stat and info:
+        with chdir(cfg.upstream_root):
+            revs = '%s..%s' % (info.hash, info.orig_hash)
+            for fname in info.orig_fnames:
+                os.system('git diff --shortstat -w --follow %s %s' % (revs, shlex_quote(fname)))
     
 
 def action_diff(cfg, args):
@@ -555,6 +563,7 @@ def main():
     sp = subparsers.add_parser('show',
                                help=inspect.getdoc(action_show))
     sp.add_argument('filename', nargs='?')
+    sp.add_argument('--stat', action='store_true', default=False)
     
     sp = subparsers.add_parser('set-valid',
                                help=inspect.getdoc(action_validate))
