@@ -81,6 +81,10 @@ def git_log(cfg, filenames, rev_range=None):
         if not len(commit_data):
             return
         
+        # Sort the results by timestamp
+        if len(filenames) > 1:
+            commit_data.sort(reverse=True)
+        
         # Create an index of filenames per commit id
         fname_by_commit = {}
         for _, commit, fname in commit_data:
