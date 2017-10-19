@@ -241,11 +241,11 @@ def action_show(cfg, args):
         Show status of all files
     '''
     
-    counts = {'good': 0, 'outdated': 0, 'unknown': 0, 'error': 0}
+    counts = {'good': 0, 'outdated': 0, 'unknown': 0, 'error': 0, 'missing': 0, 'ignored': 0}
     
     show_stat = getattr(args, 'stat', False)
     
-    if hasattr(args, 'filename') and args.filename is not None:
+    if getattr(args, 'filename', None) is not None:
         _action_show(cfg, get_fname(cfg.validation_root, args.filename), counts, show_stat)
     else:
         for root, _, files in os.walk(cfg.validation_root):
@@ -257,7 +257,7 @@ def action_show(cfg, args):
                 _action_show(cfg, fname, counts, show_stat)
     
     print()
-    print("%(good)s OK, %(outdated)s out of date, %(unknown)s unknown, %(error)s error" % (counts))
+    print("%(good)d OK, %(outdated)d out of date, %(unknown)d unknown, %(error)d error, %(missing)d missing, %(ignored)d ignored" % counts)
 
 def _action_show(cfg, fname, counts, show_stat):
     path = relpath(fname, cfg.validation_root)
@@ -274,22 +274,20 @@ def _action_show(cfg, fname, counts, show_stat):
             status = '-- '
             counts['unknown'] += 1
         elif info.notrack:
+            status = 'IGN'
+            counts['ignored'] += 1
+        elif info.is_up_to_date():
             status = 'OK '
             counts['good'] += 1
+        elif info.orig_hash == invalid_hash:
+            status = '?? '
+            counts['missing'] += 1
         else:
-            if info.is_up_to_date():
-                status = 'OK '
-                counts['good'] += 1
-            elif info.orig_hash == invalid_hash:
-                status = 'ERR'
-                # TODO: create a better error message
-                counts['unknown'] += 1
-            else:
-                status = "OLD"
-                path += ' (%s..%s)' % (info.hash, info.orig_hash)
-                counts['outdated'] += 1
+            status = "OLD"
+            path += ' (%s..%s)' % (info.hash, info.orig_hash)
+            counts['outdated'] += 1
     
-    print('%s: %s' % (status, path))
+    print('%s %s' % (status, path))
     if extra:
         print('--> ', extra)
     
