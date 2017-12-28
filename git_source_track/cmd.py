@@ -244,6 +244,8 @@ def action_show(cfg, args):
     counts = {'good': 0, 'outdated': 0, 'unknown': 0, 'error': 0, 'missing': 0, 'ignored': 0}
     
     show_stat = getattr(args, 'stat', False)
+
+    old_only = getattr(args, 'old', False)
     
     if getattr(args, 'filename', None) is not None:
         _action_show(cfg, get_fname(cfg.validation_root, args.filename), counts, show_stat)
@@ -254,12 +256,12 @@ def action_show(cfg, args):
                     continue
                 
                 fname = join(root, f)
-                _action_show(cfg, fname, counts, show_stat)
+                _action_show(cfg, fname, counts, show_stat, old_only)
     
     print()
     print("%(good)d OK, %(outdated)d out of date, %(unknown)d unknown, %(error)d error, %(missing)d missing, %(ignored)d ignored" % counts)
 
-def _action_show(cfg, fname, counts, show_stat):
+def _action_show(cfg, fname, counts, show_stat, old_only):
     path = relpath(fname, cfg.validation_root)
     extra = None
 
@@ -287,7 +289,8 @@ def _action_show(cfg, fname, counts, show_stat):
             path += ' (%s..%s)' % (info.hash, info.orig_hash)
             counts['outdated'] += 1
     
-    print('%s %s' % (status, path))
+    if not old_only or status == "OLD":
+        print('%s %s' % (status, path))
     if extra:
         print('--> ', extra)
     
@@ -562,7 +565,8 @@ def main():
                                help=inspect.getdoc(action_show))
     sp.add_argument('filename', nargs='?')
     sp.add_argument('--stat', action='store_true', default=False)
-    
+    sp.add_argument('--old', action='store_true', default=False)
+
     sp = subparsers.add_parser('set-valid',
                                help=inspect.getdoc(action_validate))
     sp.add_argument('filename')
