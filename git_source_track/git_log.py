@@ -37,10 +37,9 @@ def _get_commits(fname, rev_range):
     args.append(fname)
     it = sh.git(*args, _tty_out=False, _iter=True)
     
-    while True:
-        l1 = next(it).strip().split()
-        next(it)
-        l2 = next(it).strip()
+    for l1, _, l2 in zip(it, it, it):
+        l1 = l1.strip().split()
+        l2 = l2.strip()
         
         yield int(l1[0]), l1[1], l2
 
