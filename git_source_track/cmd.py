@@ -240,7 +240,11 @@ def set_info(fname, info, default_location):
         # Now rewrite the file
         for line in fin:
             if not written:
-                if default_location == "first" and not found:
+                if (
+                    default_location == "first"
+                    and not found
+                    and not line.startswith("#!")  # skip shebang
+                ):
                     fout.write(info.line)
                     written = True
 
