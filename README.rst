@@ -43,6 +43,9 @@ that has the following ini-style format::
     # (optional) Commits to exclude from git log output
     exclude_commits_file = foo/exclude_commits.txt
 
+    # (optional) Specify location to place validation line (first or last)
+    default_location = first
+
 Now you can issue git commands and magic will happen!
 
 Usage

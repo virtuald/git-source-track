@@ -210,7 +210,7 @@ class ValidationInfo:
 
 
 # modify a single file
-def set_info(fname, info):
+def set_info(fname, info, default_location):
     """
     Writes the magic to the first line that starts with # validated
     or # notrack. If no such line exists, write to the first line
@@ -222,6 +222,8 @@ def set_info(fname, info):
     ) as fout:
         found = False
         written = False
+
+        line = ""
 
         # search for the line first
         for line in fin:
@@ -238,7 +240,7 @@ def set_info(fname, info):
         # Now rewrite the file
         for line in fin:
             if not written:
-                if not found:
+                if default_location == "first" and not found:
                     fout.write(info.line)
                     written = True
 
@@ -251,6 +253,14 @@ def set_info(fname, info):
                     written = True
 
             fout.write(line)
+
+        if not written:
+            if line and not line.endswith("\n"):
+                fout.write("\n")
+            if line.strip():
+                # Add preceding newline if the file ends with content)
+                fout.write("\n")
+            fout.write(info.line)
 
     file_replace(fout.name, fname)
 
@@ -404,7 +414,7 @@ def action_validate(cfg, args):
     info = ValidationInfo.from_now(cfg, initials, orig_fnames)
 
     # write the information to the file
-    set_info(fname, info)
+    set_info(fname, info, cfg.default_location)
 
     print(fname)
     # print(join(cfg.upstream_root, orig_fname))
@@ -415,7 +425,7 @@ def action_notrack(cfg, args):
     """Sets special notrack metadata in file"""
     fname = get_fname(cfg.validation_root, args.filename)
     info = ValidationInfo(notrack=True, cfg=cfg)
-    set_info(fname, info)
+    set_info(fname, info, cfg.default_location)
 
     print(fname)
     print(info.line)
@@ -435,7 +445,7 @@ def update_src(cfg, info):
         cfg, relpath(info.dst_fname, cfg.validation_root)
     )
     if info.orig_fnames:
-        set_info(info.dst_fname, info)
+        set_info(info.dst_fname, info, cfg.default_location)
         if hasattr(info, "_orig_hash"):
             delattr(info, "_orig_hash")
 
@@ -530,7 +540,7 @@ class RepoData:
             # All loaded paths are relative to the config file
             for k in ["upstream_root", "validation_root", "exclude_commits_file"]:
                 try:
-                    path = cfg.get(cfg_section, k)
+                    path: str | Any = cfg.get(cfg_section, k)
                 except NoOptionError as e:
                     if k != "exclude_commits_file":
                         raise GSTError("%s: %s" % (cfgpath, str(e)))
@@ -545,6 +555,13 @@ class RepoData:
 
             if not self.upstream_commit:
                 print("Warning: no upstream_commit option set", file=sys.stderr)
+
+            try:
+                self.default_location = cfg.get(cfg_section, "default_location")
+                if self.default_location not in ("first", "last"):
+                    raise KeyError("default_location")
+            except (NoSectionError, KeyError, NoOptionError):
+                self.default_location = "first"
 
         except NoSectionError as e:
             raise GSTError("%s: %s" % (cfgpath, str(e)))
@@ -575,6 +592,8 @@ class RepoData:
         with open(self.cfgpath, "w") as fp:
             self.cfg.remove_option(cfg_section, "original_root")
             self.cfg.set(cfg_section, "upstream_commit", self.upstream_commit)
+            if self.default_location != "first":
+                self.cfg.set(cfg_section, "default_location", self.default_location)
 
             self.cfg.write(fp)
 
