@@ -1,4 +1,3 @@
-
 #
 # For information about atomic writes, see
 # -> http://stupidpythonideas.blogspot.com/2014/07/getting-atomic-writes-right.html
@@ -9,11 +8,12 @@
 
 import os
 
-if hasattr(os, 'replace'):      # Python 3.3+
+if hasattr(os, "replace"):  # Python 3.3+
     file_replace = os.replace
-elif os.name != 'nt':           # Not Windows
+elif os.name != "nt":  # Not Windows
     file_replace = os.rename
-else:                           # Windows
+else:  # Windows
+
     def file_replace(src, dst):
         try:
             os.unlink(dst)
