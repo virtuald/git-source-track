@@ -46,6 +46,9 @@ that has the following ini-style format::
     # (optional) Specify location to place validation line (first or last)
     default_location = first
 
+    # (optional) Primary branch of upstream repository
+    upstream_branch = main
+
 Now you can issue git commands and magic will happen!
 
 Usage

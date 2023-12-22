@@ -477,8 +477,7 @@ def action_upstream_checkout(cfg, args):
 def action_upstream_pull(cfg, args):
     """Update upstream git repo and set commit in config"""
     with chdir(cfg.upstream_root):
-        # TODO: this should be configurable
-        os.system("git pull origin master")
+        os.system("git pull origin %s" % (cfg.upstream_branch,))
 
     action_upstream_track(cfg, args)
 
@@ -505,17 +504,23 @@ class RepoData:
 
         [git-source-track]
 
-        # Upstream files
+        # Original files
         upstream_root = ../path/to/files
 
-        # Commit in upstream repository
+        # Commit in original repository
         upstream_commit = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
         # Files that are being validated
         validation_root = path/to_files
 
-        # Commits to exclude from git log output
+        # (optional) Commits to exclude from git log output
         exclude_commits_file = foo/exclude_commits.txt
+
+        # (optional) Specify location to place validation line (first or last)
+        default_location = first
+
+        # (optional) Primary branch of upstream repository
+        upstream_branch = main
 
     """
 
@@ -559,6 +564,11 @@ class RepoData:
 
             if not self.upstream_commit:
                 print("Warning: no upstream_commit option set", file=sys.stderr)
+
+            try:
+                self.upstream_branch = cfg.get(cfg_section, "upstream_branch")
+            except (NoSectionError, KeyError, NoOptionError):
+                self.upstream_branch = "master"
 
             try:
                 self.default_location = cfg.get(cfg_section, "default_location")
