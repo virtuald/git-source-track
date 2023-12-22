@@ -221,7 +221,6 @@ def set_info(fname, info):
         dir=dirname(fname), mode="w", delete=False
     ) as fout:
         found = False
-        written = False
 
         # search for the line first
         for line in fin:
@@ -231,26 +230,13 @@ def set_info(fname, info):
                 or line.startswith("# notrack")
             ):
                 found = True
-                break
-
-        fin.seek(0)
-
-        # Now rewrite the file
-        for line in fin:
-            if not written:
-                if not found:
-                    fout.write(info.line)
-                    written = True
-
-                elif (
-                    line.startswith("# validated")
-                    or line.startswith("# novalidate")
-                    or line.startswith("# notrack")
-                ):
-                    line = info.line
-                    written = True
+                line = info.line
 
             fout.write(line)
+
+        if not found:
+            fout.write("\n")
+            fout.write(info.line)
 
     file_replace(fout.name, fname)
 
@@ -684,14 +670,14 @@ def main():
                     inspect.cleandoc(
                         """
                     Upstream commit is %s, %s is in .gittrack
-                    
+
                     To fix use one of these commands:
-                    
+
                     * git source-track upstream-checkout: will set the upstream commit to match
                       that which is in .gittrack
                     * git source-track upstream-track: will modify .gittrack to match the current
                       upstream commit
-                    
+
                     If in doubt, you probably want 'git source-track upstream-checkout'
                 """
                     )
