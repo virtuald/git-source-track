@@ -310,9 +310,8 @@ def action_show(cfg, args):
     else:
         for root, _, files in os.walk(cfg.validation_root):
             for f in sorted(files):
-                if not f.endswith(".py") or f == "__init__.py":
+                if not f.endswith(cfg.file_extension) or f == "__init__.py":
                     continue
-
                 fname = join(root, f)
                 _action_show(cfg, fname, counts, show_stat, old_only)
 
@@ -561,6 +560,8 @@ class RepoData:
                 self.upstream_commit = cfg.get(cfg_section, "upstream_commit")
             except (NoSectionError, KeyError):
                 self.upstream_commit = None
+
+            self.file_extension = cfg.get(cfg_section, "file_extension", fallback=".py")
 
             if not self.upstream_commit:
                 print("Warning: no upstream_commit option set", file=sys.stderr)
